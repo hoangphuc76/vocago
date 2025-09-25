@@ -1,0 +1,68 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'EnglishForce-core/EnglishForce-backend/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'EnglishForce-core/EnglishForce-backend/**'
+
+permissions: read-all              # Giới hạn quyền mặc định cho workflow
+concurrency:                       # Tránh chạy nhiều workflow trùng nhau cùng nhánh
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:                          # Thiết lập thư mục mặc định để chạy các lệnh
+  run:
+    working-directory: EnglishForce-core/EnglishForce-backend
+
+jobs:
+  test:                            # Job test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x]       # Bạn có thể thêm 20.x nếu cần
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: EnglishForce-core/EnglishForce-backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to vocago with error handling
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /home/$USER/vocago
+            echo "🔄 Updating code from develop branch..."
+            git fetch --all
+            git checkout develop || { echo "❌ Checkout failed"; exit 1; }
+            git reset --hard origin/develop || { echo "❌ Reset failed"; exit 1; }
+            git pull origin develop || { echo "❌ Pull failed"; exit 1; }
+            echo "✅ Code updated successfully"
+
+            echo "🐳 Building and starting containers..."
+            docker compose up -d --build backend
+            echo "📊 Container status:"
+            docker compose ps

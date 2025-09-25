@@ -1,0 +1,84 @@
+name: Frontend CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'EnglishForce-core/EnglishForce-frontend/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'EnglishForce-core/EnglishForce-frontend/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: EnglishForce-core/EnglishForce-frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: EnglishForce-core/EnglishForce-frontend
+
+      - name: Build
+        run: npm run build
+        working-directory: EnglishForce-core/EnglishForce-frontend
+        env:
+          CI: false
+
+      # ⬇️ Step 2: Copy build mới từ runner sang server
+      - name: Upload build folder to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "EnglishForce-core/EnglishForce-frontend/build/*"
+          target: "/home/ubuntu/vocago/EnglishForce-core/EnglishForce-frontend/build"
+          strip_components: 3
+          rm: true
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH with docker-compose
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /home/ubuntu/vocago/EnglishForce-core/EnglishForce-frontend   # thư mục có docker-compose.yml
+
+            if [ -d "build" ]; then
+              echo "✅ build/ folder exists"
+            else
+              echo "⚠️ build/ folder not found!"
+            fi
+
+            echo "🐳 Restart frontend container..."
+            docker compose up -d --build frontend
+
+            echo "Clean containers not in use..."
+            docker container prune -f
+
+            echo "🧹 Cleanup unused images..."
+            docker image prune -f

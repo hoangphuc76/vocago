@@ -1,0 +1,52 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    volumes:
+      - ./nginx:/etc/nginx/conf.d:ro   # mount cả thư mục
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - frontend
+      - backend
+    restart: always
+
+  frontend:
+    build:
+      context: ./EnglishForce-core/EnglishForce-frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    expose:
+      - "80"   # chỉ expose nội bộ, không public ra ngoài
+    restart: always
+
+  backend:
+    build:
+      context: ./EnglishForce-core/EnglishForce-backend
+      dockerfile: Dockerfile
+    container_name: backend
+    expose:
+      - "8000"
+    env_file:
+      - ./EnglishForce-core/EnglishForce-backend/.env.production
+    depends_on:
+      - database
+    restart: always
+
+  database:
+    image: postgres:15
+    container_name: database
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123
+      POSTGRES_DB: englishforce
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: always
+
+volumes:
+  pgdata:

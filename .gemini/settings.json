@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "mcp-openmemory": {
+      "command": "npx",
+      "args": [
+        "@peakmojo/mcp-openmemory@latest"
+      ],
+      "env": {
+        "MEMORY_DB_PATH": "/home/phuc/mcp-memory.sqlite"
+      }
+    },
+    "serena": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server"
+      ],
+      "cwd": ".", 
+      "trust": true
+    }
+  }
+}
+
